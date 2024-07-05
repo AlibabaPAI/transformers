@@ -20,14 +20,20 @@ Here is the full list of checkpoints on the hub that can be fine-tuned by this s
 https://huggingface.co/models?filter=text-generation
 """
 # You can also adapt this script on your own causal language modeling task. Pointers for this are left as comments.
+import os
 import torchacc
 torchacc.utils.patch.patch_llama(True)
+if os.getenv('CP_SIZE', None):
+    from torchacc.ops import context_parallel
+    import torch.distributed as dist
+    dist.init_process_group('lazy')
+    context_parallel.initialize_context_parallel(int(os.getenv('CP_SIZE', '8')))
 
 from torchdistx import deferred_init
 
 import logging
 import math
-import os
+
 import sys
 from dataclasses import dataclass, field
 from itertools import chain
@@ -51,6 +57,7 @@ from transformers import (
     default_data_collator,
     is_torch_xla_available,
     set_seed,
+    TrainerCallback
 )
 from transformers.testing_utils import CaptureLogger
 from transformers.trainer_utils import get_last_checkpoint
@@ -590,6 +597,13 @@ def main():
             preds = preds[:, :-1].reshape(-1)
             return metric.compute(predictions=preds, references=labels)
 
+    class ProfCallback(TrainerCallback):
+        def __init__(self, prof):
+            self.prof = prof
+
+        def on_step_end(self, args, state, control, **kwargs):
+            self.prof.step()
+
     # Initialize our Trainer
     trainer = Trainer(
         model=model,
@@ -612,7 +626,18 @@ def main():
             checkpoint = training_args.resume_from_checkpoint
         elif last_checkpoint is not None:
             checkpoint = last_checkpoint
-        train_result = trainer.train(resume_from_checkpoint=checkpoint)
+        if os.getenv('RANK', '0') == '0' and os.getenv('PROFILE_FOLDER', None):
+            with torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CPU,
+                                                    torch.profiler.ProfilerActivity.CUDA],
+                                        schedule=torch.profiler.schedule(skip_first=3, wait=2, warmup=2, active=4, repeat=3),
+                                        on_trace_ready=torch.profiler.tensorboard_trace_handler(os.getenv('PROFILE_FOLDER')),
+                                        profile_memory=False,
+                                        with_stack=False,
+                                        record_shapes=False) as prof:
+                trainer.add_callback(ProfCallback(prof=prof))
+                train_result = trainer.train(resume_from_checkpoint=checkpoint)
+        else:
+            train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
         metrics = train_result.metrics

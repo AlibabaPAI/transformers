@@ -19,6 +19,7 @@
 # limitations under the License.
 import math
 from typing import List, Optional, Tuple, Union
+import os
 
 import torch
 import torch.nn.functional as F
@@ -52,6 +53,8 @@ from .configuration_llama import LlamaConfig
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
+
+from torchacc.ops import context_parallel
 
 
 logger = logging.get_logger(__name__)
@@ -464,9 +467,15 @@ class LlamaFlashAttention2(LlamaAttention):
             key_states = key_states.to(target_dtype)
             value_states = value_states.to(target_dtype)
 
-        attn_output = self._flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
-        )
+        if os.getenv('CP_SIZE', None):
+            attn_output = context_parallel.ulysses(
+                query_states, key_states, value_states,
+                dropout_p=dropout_rate,
+                process_group=context_parallel.get_intra_cp_process_group())
+        else:
+            attn_output = self._flash_attention_forward(
+                query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
+            )
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
@@ -947,6 +956,12 @@ class LlamaModel(LlamaPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
+        if os.getenv('CP_SIZE', None):
+            position_ids = context_parallel.slice_forward(
+                position_ids, 1 , context_parallel.get_intra_cp_process_group())
+            inputs_embeds = context_parallel.slice_forward(
+                inputs_embeds, 1 , context_parallel.get_intra_cp_process_group())
+
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
@@ -993,6 +1008,9 @@ class LlamaModel(LlamaPreTrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
+        if os.getenv('CP_SIZE', None):
+            hidden_states = context_parallel.gather_forward_split_backward(
+                hidden_states, 1, context_parallel.get_intra_cp_process_group())
         hidden_states = self.norm(hidden_states)
 
         # add hidden states from the last decoder layer
