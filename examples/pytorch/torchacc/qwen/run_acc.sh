@@ -38,7 +38,7 @@ torchrun --nproc_per_node $NPROC_PER_NODE \
     --per_device_eval_batch_size $BS \
     --do_train \
     --output_dir ./acc_outputs \
-    --config_name ./Qwen2-7B/ \
+    --model_name_or_path ./Qwen2-7B/ \
     --tokenizer_name ./Qwen2-7B/ \
     --trust_remote_code true \
     --low_cpu_mem_usage true \

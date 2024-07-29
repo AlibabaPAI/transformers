@@ -33,9 +33,9 @@ torchrun --nproc_per_node $NPROC_PER_NODE \
     --per_device_train_batch_size $BS \
     --per_device_eval_batch_size $BS \
     --do_train \
-    --output_dir ./native_outputs \
+    --output_dir ./native_outputs2 \
     --overwrite_output_dir \
-    --config_name ./Qwen2-7B/ \
+    --model_name_or_path ./Qwen2-7B/ \
     --tokenizer_name ./Qwen2-7B/ \
     --trust_remote_code true \
     --low_cpu_mem_usage true \
@@ -46,7 +46,6 @@ torchrun --nproc_per_node $NPROC_PER_NODE \
     --logging_strategy steps \
     --gradient_checkpointing no \
     --logging_steps 100 \
-    --max_steps 10 \
     --$PRECISION \
     --fsdp "auto_wrap" \
     --fsdp_config $FSDP_CONFIG 2>&1 | tee ./${JOB_NAME}_${RANK}_${TASK_TAG}.log
