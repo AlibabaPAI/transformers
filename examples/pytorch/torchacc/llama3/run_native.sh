@@ -43,5 +43,5 @@ torchrun --nproc_per_node $NPROC_PER_NODE \
     --gradient_checkpointing no \
     --logging_steps 100 \
     --$PRECISION \
-    --fsdp "full_shard" \
+    --fsdp "auto_wrap" \
     --fsdp_config $FSDP_CONFIG 2>&1 | tee ./$JOB_NAME.log
