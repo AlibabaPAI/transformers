@@ -26,22 +26,23 @@ torchrun --nproc_per_node $NPROC_PER_NODE \
     --master_addr $MASTER_ADDR \
     ../../language-modeling/run_clm.py \
     --num_train_epochs 2 \
-    --dataset_name wikitext \
+    --dataset_name Salesforce/wikitext \
     --dataset_config_name wikitext-103-raw-v1 \
+    --preprocessing_num_workers 90 \
     --use_fast_tokenizer false \
     --per_device_train_batch_size $BS \
     --per_device_eval_batch_size $BS \
     --do_train \
-    --output_dir /tmp/test-clm \
+    --output_dir ./ds_outputs \
     --overwrite_output_dir \
-    --config_name ./Qwen1.5-7B/ \
-    --tokenizer_name ./Qwen1.5-7B/ \
+    --config_name ./Qwen2-7B/ \
+    --tokenizer_name ./Qwen2-7B/ \
     --trust_remote_code true \
     --low_cpu_mem_usage true \
-    --cache_dir ../cache \
     --block_size $SEQLEN \
     --optim adamw_torch \
-    --save_strategy no \
+    --cache_dir ../cache \
+    --save_strategy epoch \
     --logging_strategy steps \
     --gradient_checkpointing no \
     --logging_steps 100 \
