@@ -33,7 +33,7 @@ torchrun --nproc_per_node $NPROC_PER_NODE \
     --per_device_train_batch_size $BS \
     --per_device_eval_batch_size $BS \
     --do_train \
-    --output_dir ./native_outputs2 \
+    --output_dir ./native_outputs \
     --overwrite_output_dir \
     --model_name_or_path ./Qwen2-7B/ \
     --tokenizer_name ./Qwen2-7B/ \
