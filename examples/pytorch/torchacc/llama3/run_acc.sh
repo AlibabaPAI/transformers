@@ -12,9 +12,9 @@ export XLA_FLAGS='--xla_gpu_memory_limit_slop_factor=500'
 [ -z "$MASTER_ADDR" ] && MASTER_ADDR=127.0.0.1
 [ -z "$MASTER_PORT" ] && MASTER_PORT=9010
 
-BS=3
+BS=1
 SEQLEN=4096
-NPROC_PER_NODE=8
+NPROC_PER_NODE=4
 PRECISION="bf16=true"
 FSDP_CONFIG="llama3_fsdp_acc.json"
 JOB_NAME="LLAMA3_FSDP_TORCHACC_GPU${NPROC_PER_NODE}_BS${BS}_SEQLEN${SEQLEN}_BF16_FA"
@@ -28,7 +28,7 @@ torchrun --nproc_per_node $NPROC_PER_NODE \
     ../../language-modeling/run_clm.py \
     --num_train_epochs 2 \
     --dataset_name wikitext \
-    --dataset_config_name wikitext-103-raw-v1 \
+    --dataset_config_name wikitext-2-raw-v1 \
     --use_fast_tokenizer false \
     --per_device_train_batch_size $BS \
     --per_device_eval_batch_size $BS \
