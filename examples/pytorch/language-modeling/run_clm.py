@@ -23,7 +23,7 @@ https://huggingface.co/models?filter=text-generation
 import torchacc
 torchacc.utils.patch.patch_llama(True)
 
-from torchdistx import deferred_init
+#from torchdistx import deferred_init
 
 import logging
 import math
@@ -34,7 +34,7 @@ from itertools import chain
 from typing import Optional
 
 import datasets
-import evaluate
+#import evaluate
 import torch
 from datasets import load_dataset
 
@@ -450,6 +450,30 @@ def main():
         #logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M params")
 
 
+    # 输出每一层的参数量
+    def count_parameters(model):
+        total_params = 0
+        layer_params = {}
+        for name, module in model.named_modules():
+            if len(list(module.parameters())) > 0:
+                param_count = sum(p.numel() for p in module.parameters())
+                total_params += param_count
+                layer_params[name] = param_count
+        return layer_params, total_params
+
+    # 调用函数
+    layer_params, total_params = count_parameters(model)
+
+    # 输出每一层的参数量
+    #print("Layer Parameters:")
+    #for name, param_count in layer_params.items():
+    #    print(f"{name}: {param_count}")
+
+    # 输出总参数量
+    #print(f"\nTotal parameters: {total_params}")
+    
+    #os.exit()
+    
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
     # on a small vocab and want a smaller embedding size, remove this test.
     embedding_size = model.get_input_embeddings().weight.shape[0]
