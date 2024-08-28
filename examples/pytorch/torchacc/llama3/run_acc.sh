@@ -19,6 +19,7 @@ PRECISION="bf16=true"
 FSDP_CONFIG="llama3_fsdp_acc.json"
 JOB_NAME="LLAMA3_FSDP_TORCHACC_GPU${NPROC_PER_NODE}_BS${BS}_SEQLEN${SEQLEN}_BF16_FA"
 
+export CUDA_VISIBLE_DEVICES=4,5,6,7
 
 torchrun --nproc_per_node $NPROC_PER_NODE \
     --nnodes $WORLD_SIZE \

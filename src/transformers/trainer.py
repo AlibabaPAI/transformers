@@ -848,6 +848,8 @@ class Trainer:
             return None
 
         # Build the sampler.
+        #import pdb
+        #pdb.set_trace()
         if self.args.group_by_length:
             if is_datasets_available() and isinstance(self.train_dataset, datasets.Dataset):
                 lengths = (
@@ -894,13 +896,20 @@ class Trainer:
             "pin_memory": self.args.dataloader_pin_memory,
             "persistent_workers": self.args.dataloader_persistent_workers,
         }
+        
 
+        #import pdb
+        #pdb.set_trace()
         if not isinstance(train_dataset, torch.utils.data.IterableDataset):
+            #torch.manual_seed(0)
+            #g = torch.Generator()
             dataloader_params["sampler"] = self._get_train_sampler()
             dataloader_params["drop_last"] = self.args.dataloader_drop_last
             dataloader_params["worker_init_fn"] = seed_worker
+            #worker_id = int(os.getenv('LOCAL_RANK'))
+            #dataloader_params["worker_init_fn"]  = random.seed(0)   # 固定每次迭代不同rank每轮epoch的random_seed相同;
             dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
-
+            #dataloader_params["generator"] = g
         return self.accelerator.prepare(DataLoader(train_dataset, **dataloader_params))
 
     def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.Sampler]:
@@ -2118,7 +2127,10 @@ class Trainer:
 
         # Check if saved optimizer or scheduler states exist
         self._load_optimizer_and_scheduler(resume_from_checkpoint)
-
+        
+        #self._save_checkpoint(model, trial)
+        #os.exit()
+        #self._save_checkpoint(model, trial)
         # important: at this point:
         # self.model         is the Transformers Model
         # self.model_wrapped is DDP(Transformers Model), Deepspeed(Transformers Model),
@@ -2199,8 +2211,20 @@ class Trainer:
             self._evaluate(trial, ignore_keys_for_eval, skip_scheduler=True)
 
         total_batched_samples = 0
+
         for epoch in range(epochs_trained, num_train_epochs):
+            # torch.manual_seed(42)
+            #epoch_iterator = None
+            #print("before")
+            #if epoch >= 1:
+            #   print(epoch_iterator.dataloader.iteration)
             epoch_iterator = train_dataloader
+            #print("after")
+            #print(epoch_iterator.dataloader.iteration)
+            #import pdb
+            #pdb.set_trace()
+            #import pdb
+            #pdb.set_trace()
             if hasattr(epoch_iterator, "set_epoch"):
                 epoch_iterator.set_epoch(epoch)
 
@@ -2220,14 +2244,25 @@ class Trainer:
 
             rng_to_sync = False
             steps_skipped = 0
+            #import pdb
+            #pdb.set_trace()
             if steps_trained_in_current_epoch > 0:
                 epoch_iterator = skip_first_batches(epoch_iterator, steps_trained_in_current_epoch)
                 steps_skipped = steps_trained_in_current_epoch
                 steps_trained_in_current_epoch = 0
                 rng_to_sync = True
-
+            #import pdb
+            #pdb.set_trace()
             step = -1
+            #import pdb
+            #pdb.set_trace()
             for step, inputs in enumerate(epoch_iterator):
+                #print("epoch ")
+                #print(epoch_iterator.dataloader.iteration)
+                #if step == 0:
+                #    print('LOCAL RANK: ' + os.getenv('LOCAL_RANK'))
+                #    print(inputs)
+                
                 total_batched_samples += 1
 
                 if self.args.include_num_input_tokens_seen:
@@ -2263,10 +2298,19 @@ class Trainer:
 
                 if step % args.gradient_accumulation_steps == 0:
                     self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
+                    
+                # 仅进行一次forward
+                #self.training_step(model, inputs)
+                # 再次save:
 
+                
                 with self.accelerator.accumulate(model):
+                    #tr_loss_step = self.training_step(model, inputs)
                     tr_loss_step = self.training_step(model, inputs)
-
+                #print("step done!")
+                #self._save_checkpoint(model, trial)
+                #os.exit()
+                
                 if (
                     args.logging_nan_inf_filter
                     and not is_torch_xla_available()
@@ -2804,6 +2848,8 @@ class Trainer:
         if self.args.world_size > 1:
             process_index = self.args.process_index
             rng_file = os.path.join(checkpoint, f"rng_state_{process_index}.pth")
+            #import pdb
+            #pdb.set_trace()
             if not os.path.isfile(rng_file):
                 logger.info(
                     f"Didn't find an RNG file for process {process_index}, if you are resuming a training that "
@@ -2959,6 +3005,17 @@ class Trainer:
         if is_torch_xla_available():
             xm.rendezvous("saving_optimizer_states")
             if self.is_fsdp_xla_enabled and not self.is_fsdp_xla_v2_enabled:
+                optim = self.model.optim_state_dict(self.optimizer, "FULL_STATE_DICT")
+                xm.save(
+                    optim,
+                    os.path.join(
+                        #output_dir, f"rank{self.args.process_index}-of-{self.args.world_size}-{OPTIMIZER_NAME}"
+                        output_dir, f"{OPTIMIZER_NAME}"
+                    ),
+                    master_only=True,
+                )
+                print("optimizer save done!")
+                '''
                 optm = {
                     "optimizer": self.optimizer.state_dict(),
                     "shard_metadata": self.model.get_shard_metadata(),
@@ -2970,6 +3027,7 @@ class Trainer:
                     ),
                     master_only=False,
                 )
+                '''
             else:
                 xm.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
             with warnings.catch_warnings(record=True) as caught_warnings:
@@ -3050,23 +3108,45 @@ class Trainer:
             )
         )
         checkpoint_file_exists = (
-            glob.glob(os.path.join(checkpoint, f"rank*-of-{self.args.world_size}-{OPTIMIZER_NAME}"))
+            #glob.glob(os.path.join(checkpoint, f"rank*-of-{self.args.world_size}-{OPTIMIZER_NAME}"))
+            glob.glob(os.path.join(checkpoint, f"{OPTIMIZER_NAME}"))
             if self.is_fsdp_xla_enabled and not self.is_fsdp_xla_v2_enabled
             else checkpoint_file_exists
         )
+        #checkpoint_file_exists = True
+        #import pdb
+        #pdb.set_trace()
         if checkpoint_file_exists and os.path.isfile(os.path.join(checkpoint, SCHEDULER_NAME)):
             # Load in optimizer and scheduler states
             if is_torch_xla_available():
                 # On TPU we have to take some extra precautions to properly load the states on the right device.
                 if self.is_fsdp_xla_enabled and not self.is_fsdp_xla_v2_enabled:
-                    optimizer_state = torch.load(
-                        os.path.join(
-                            checkpoint, f"rank{self.args.process_index}-of-{self.args.world_size}-{OPTIMIZER_NAME}"
-                        ),
-                        map_location="cpu",
-                    )
+                    print("begin load optimizer state!")
+                    optimizer_state = None
+                    # 这里需要配合rank0_only使用
+                    if self.args.process_index == 0:
+                        optimizer_state = torch.load(
+                            #os.path.join(
+                            #    checkpoint, f"rank{self.args.process_index}-of-{self.args.world_size}-{OPTIMIZER_NAME}"
+                            #),
+                            os.path.join(
+                                checkpoint, f"{OPTIMIZER_NAME}"
+                            ),
+                            map_location="cpu",
+                        )
+                        #print(optimizer_state['param_groups'])
+                        '''
+                        for layer_name, layer_state in optimizer_state.items():
+                            print(layer_name)
+                            for state_name, state_params in layer_state.items():
+                                print(state_name, state_params.device, state_params.shape)
+                        '''
+                    optimizer_state = self.model.load_optim_state_dict(optimizer_state, self.optimizer, "FULL_STATE_DICT")
+                    #import pdb
+                    #pdb.set_trace()
+                    #import os
                     # We only need `optimizer` when resuming from checkpoint
-                    optimizer_state = optimizer_state["optimizer"]
+                    #optimizer_state = optimizer_state["optimizer"]
                 else:
                     optimizer_state = torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location="cpu")
                 with warnings.catch_warnings(record=True) as caught_warnings:
@@ -3307,7 +3387,7 @@ class Trainer:
 
         return ctx_manager
 
-    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
+    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]], trial=None) -> torch.Tensor:
         """
         Perform a training step on a batch of inputs.
 
@@ -3335,7 +3415,6 @@ class Trainer:
             loss = self.compute_loss(model, inputs)
 
         del inputs
-
         kwargs = {}
 
         # For LOMO optimizers you need to explicitly use the learnign rate
@@ -3352,7 +3431,7 @@ class Trainer:
             self.accelerator.backward(loss, **kwargs)
 
         return loss.detach() / self.args.gradient_accumulation_steps
-
+        
     def compute_loss(self, model, inputs, return_outputs=False):
         """
         How the loss is computed by Trainer. By default, all models return the loss in the first element.
