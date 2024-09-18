@@ -35,6 +35,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
+from torchacc.dist.fsdp import FullyShardedDataParallel as FSDP
 
 # Integrations must be imported before ML frameworks:
 # isort: off
@@ -2076,7 +2077,6 @@ class Trainer:
             self.model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
 
         model = self._wrap_model(self.model_wrapped)
-
         # as the model is wrapped, don't use `accelerator.prepare`
         # this is for unhandled cases such as
         # FSDP-XLA, SageMaker MP/DP, DataParallel, IPEX
@@ -2213,18 +2213,8 @@ class Trainer:
         total_batched_samples = 0
 
         for epoch in range(epochs_trained, num_train_epochs):
-            # torch.manual_seed(42)
-            #epoch_iterator = None
-            #print("before")
-            #if epoch >= 1:
-            #   print(epoch_iterator.dataloader.iteration)
             epoch_iterator = train_dataloader
-            #print("after")
-            #print(epoch_iterator.dataloader.iteration)
-            #import pdb
-            #pdb.set_trace()
-            #import pdb
-            #pdb.set_trace()
+
             if hasattr(epoch_iterator, "set_epoch"):
                 epoch_iterator.set_epoch(epoch)
 
@@ -2244,25 +2234,16 @@ class Trainer:
 
             rng_to_sync = False
             steps_skipped = 0
-            #import pdb
-            #pdb.set_trace()
+
             if steps_trained_in_current_epoch > 0:
                 epoch_iterator = skip_first_batches(epoch_iterator, steps_trained_in_current_epoch)
                 steps_skipped = steps_trained_in_current_epoch
                 steps_trained_in_current_epoch = 0
                 rng_to_sync = True
-            #import pdb
-            #pdb.set_trace()
+
             step = -1
-            #import pdb
-            #pdb.set_trace()
+
             for step, inputs in enumerate(epoch_iterator):
-                #print("epoch ")
-                #print(epoch_iterator.dataloader.iteration)
-                #if step == 0:
-                #    print('LOCAL RANK: ' + os.getenv('LOCAL_RANK'))
-                #    print(inputs)
-                
                 total_batched_samples += 1
 
                 if self.args.include_num_input_tokens_seen:
@@ -2298,18 +2279,9 @@ class Trainer:
 
                 if step % args.gradient_accumulation_steps == 0:
                     self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
-                    
-                # 仅进行一次forward
-                #self.training_step(model, inputs)
-                # 再次save:
-
                 
                 with self.accelerator.accumulate(model):
-                    #tr_loss_step = self.training_step(model, inputs)
                     tr_loss_step = self.training_step(model, inputs)
-                #print("step done!")
-                #self._save_checkpoint(model, trial)
-                #os.exit()
                 
                 if (
                     args.logging_nan_inf_filter
@@ -3002,10 +2974,12 @@ class Trainer:
             torch.save(rng_states, os.path.join(output_dir, f"rng_state_{self.args.process_index}.pth"))
 
     def _save_optimizer_and_scheduler(self, output_dir):
+        #import pdb
+        #pdb.set_trace()
         if is_torch_xla_available():
             xm.rendezvous("saving_optimizer_states")
             if self.is_fsdp_xla_enabled and not self.is_fsdp_xla_v2_enabled:
-                optim = self.model.optim_state_dict(self.optimizer, "FULL_STATE_DICT")
+                optim = FSDP.full_optim_state_dict(self.model, self.optimizer)
                 xm.save(
                     optim,
                     os.path.join(
@@ -3141,7 +3115,7 @@ class Trainer:
                             for state_name, state_params in layer_state.items():
                                 print(state_name, state_params.device, state_params.shape)
                         '''
-                    optimizer_state = self.model.load_optim_state_dict(optimizer_state, self.optimizer, "FULL_STATE_DICT")
+                    optimizer_state = FSDP.load_optim_state_dict(self.model, optimizer_state, self.optimizer)
                     #import pdb
                     #pdb.set_trace()
                     #import os
@@ -3554,6 +3528,7 @@ class Trainer:
         # They can then be reloaded using `from_pretrained()`
         supported_classes = (PushToHubMixin,)
         xm.rendezvous("saving_checkpoint")
+
         if self.is_fsdp_xla_enabled and not self.is_fsdp_xla_v2_enabled:
             ckpt = {
                 "model": model.state_dict(),
