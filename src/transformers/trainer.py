@@ -2959,9 +2959,9 @@ class Trainer:
         if is_torch_xla_available():
             xm.rendezvous("saving_optimizer_states")
             if self.is_fsdp_xla_enabled and not self.is_fsdp_xla_v2_enabled:
-                from torchacc.dist.fsdp import FullyShardedDataParallel as ACC_FSDP
+                from torchacc.dist.fsdp import FullyShardedDataParallel as FSDP
                 
-                optm = ACC_FSDP.full_optim_state_dict(self.model, self.optimizer)
+                optm = FSDP.full_optim_state_dict(self.model, self.optimizer)
                 xm.save(
                     optm,
                     os.path.join(
@@ -3056,7 +3056,7 @@ class Trainer:
         if checkpoint_file_exists and os.path.isfile(os.path.join(checkpoint, SCHEDULER_NAME)):
             # Load in optimizer and scheduler states
             if is_torch_xla_available():
-                from torchacc.dist.fsdp import FullyShardedDataParallel as ACC_FSDP
+                from torchacc.dist.fsdp import FullyShardedDataParallel as FSDP
                 # On TPU we have to take some extra precautions to properly load the states on the right device.
                 if self.is_fsdp_xla_enabled and not self.is_fsdp_xla_v2_enabled:
                     optimizer_state = None
@@ -3068,7 +3068,7 @@ class Trainer:
                             map_location="cpu",
                         )
 
-                    optimizer_state = ACC_FSDP.load_optim_state_dict(self.model, optimizer_state, self.optimizer)
+                    optimizer_state = FSDP.load_optim_state_dict(self.model, optimizer_state, self.optimizer)
                 else:
                     optimizer_state = torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location="cpu")
                 with warnings.catch_warnings(record=True) as caught_warnings:
